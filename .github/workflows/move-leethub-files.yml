@@ -11,23 +11,22 @@ permissions:
   contents: write
 
 jobs:
-  relocate:
+  move-leethub-files:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Move LeetHub-generated folders into leetcode/
+      - name: Move root LeetHub folders into leetcode (overwrite mode)
         shell: bash
         run: |
           set -euo pipefail
 
           mkdir -p leetcode
-
           shopt -s nullglob
 
           moved=0
@@ -35,29 +34,39 @@ jobs:
           for path in */; do
             dir="${path%/}"
 
-            # .github, leetcode, 기타 숨김/시스템 폴더 제외
+            # 제외할 루트 폴더
             case "$dir" in
-              .git|.github|leetcode)
+              .git|.github|leetcode|백준|baekjoon|programmers|프로그래머스|swea|goorm|구름|src|docs|scripts|assets|test|tests)
                 continue
                 ;;
             esac
 
-            # LeetHub가 만드는 문제 폴더 패턴만 이동
-            # 예: "1. Two Sum", "0001-two-sum", "Two Sum" 등
-            # 필요하면 여기 조건을 더 좁히시면 됩니다.
-            if [[ -f "$dir/README.md" ]] || compgen -G "$dir/*.*" > /dev/null; then
-              if [[ ! -e "leetcode/$dir" ]]; then
-                git mv "$dir" "leetcode/$dir"
-                moved=1
-              fi
+            # 숫자로 시작하는 폴더만 대상
+            [[ "$dir" =~ ^[0-9] ]] || continue
+
+            # README 존재 확인
+            [[ -f "$dir/README.md" ]] || continue
+
+            # LeetCode 문제 링크 확인
+            grep -qi 'leetcode\.com/problems/' "$dir/README.md" || continue
+
+            echo "Processing $dir"
+
+            # 기존 폴더 있으면 삭제 (overwrite)
+            if [[ -d "leetcode/$dir" ]]; then
+              echo "Overwrite: removing leetcode/$dir"
+              git rm -r "leetcode/$dir" || true
             fi
+
+            git mv "$dir" "leetcode/$dir"
+            moved=1
           done
 
           if [[ "$moved" -eq 0 ]]; then
-            echo "No folders moved."
+            echo "No LeetHub folders matched."
           fi
 
-      - name: Commit changes
+      - name: Commit and push changes
         shell: bash
         run: |
           set -euo pipefail
@@ -65,11 +74,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          if git diff --cached --quiet && git diff --quiet; then
+          git add -A
+
+          if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
 
-          git add -A
-          git commit -m "chore: move LeetHub files into /leetcode"
+          git commit -m "chore: sync LeetHub problems into leetcode (overwrite)"
           git push
