@@ -2,13 +2,14 @@ name: Move LeetHub Files
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master]
   workflow_dispatch:
 
 permissions:
   contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   move-leethub-files:
@@ -18,15 +19,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Move root LeetHub folders into leetcode (overwrite mode)
+      - name: Move root LeetHub folders into leetcode by difficulty (overwrite mode)
         shell: bash
         run: |
           set -euo pipefail
 
-          mkdir -p leetcode
+          mkdir -p leetcode/easy leetcode/medium leetcode/hard
           shopt -s nullglob
 
           moved=0
@@ -34,31 +33,47 @@ jobs:
           for path in */; do
             dir="${path%/}"
 
-            # 제외할 루트 폴더
             case "$dir" in
               .git|.github|leetcode|백준|baekjoon|programmers|프로그래머스|swea|goorm|구름|src|docs|scripts|assets|test|tests)
                 continue
                 ;;
             esac
 
-            # 숫자로 시작하는 폴더만 대상
+            # 루트에 생긴 숫자 시작 폴더만 대상
             [[ "$dir" =~ ^[0-9] ]] || continue
 
-            # README 존재 확인
+            # README 확인
             [[ -f "$dir/README.md" ]] || continue
 
-            # LeetCode 문제 링크 확인
+            # LeetCode 문제인지 확인
             grep -qi 'leetcode\.com/problems/' "$dir/README.md" || continue
 
-            echo "Processing $dir"
+            target_base=""
 
-            # 기존 폴더 있으면 삭제 (overwrite)
-            if [[ -d "leetcode/$dir" ]]; then
-              echo "Overwrite: removing leetcode/$dir"
-              git rm -r "leetcode/$dir" || true
+            # 난이도 판별
+            if grep -qiE 'difficulty[^[:alpha:]]*easy|##[[:space:]]*easy|^[[:space:]-]*easy[[:space:]]*$' "$dir/README.md"; then
+              target_base="leetcode/easy"
+            elif grep -qiE 'difficulty[^[:alpha:]]*medium|##[[:space:]]*medium|^[[:space:]-]*medium[[:space:]]*$' "$dir/README.md"; then
+              target_base="leetcode/medium"
+            elif grep -qiE 'difficulty[^[:alpha:]]*hard|##[[:space:]]*hard|^[[:space:]-]*hard[[:space:]]*$' "$dir/README.md"; then
+              target_base="leetcode/hard"
+            else
+              echo "Skip: difficulty not detected for $dir"
+              continue
             fi
 
-            git mv "$dir" "leetcode/$dir"
+            target_dir="$target_base/$dir"
+
+            echo "Processing $dir -> $target_dir"
+
+            # overwrite mode
+            if [[ -d "$target_dir" ]]; then
+              echo "Overwrite: removing existing $target_dir"
+              rm -rf "$target_dir"
+              git add -A
+            fi
+
+            git mv "$dir" "$target_dir" || mv "$dir" "$target_dir"
             moved=1
           done
 
@@ -81,5 +96,5 @@ jobs:
             exit 0
           fi
 
-          git commit -m "chore: sync LeetHub problems into leetcode (overwrite)"
+          git commit -m "chore: organize LeetHub problems by difficulty"
           git push
