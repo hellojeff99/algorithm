@@ -13,6 +13,10 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+concurrency:
+  group: move-leethub-files-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   move-leethub-files:
     if: github.actor != 'github-actions[bot]'
@@ -153,11 +157,24 @@ jobs:
 
           git commit -m "chore: organize LeetHub problems by difficulty"
 
-          git fetch origin "${BRANCH}"
-          git pull --rebase origin "${BRANCH}" || {
-            echo "Rebase failed"
-            git rebase --abort || true
-            exit 1
-          }
+          for attempt in 1 2 3 4 5; do
+            echo "Push attempt $attempt"
 
-          git push origin HEAD:"${BRANCH}"
+            git fetch origin "${BRANCH}"
+            git rebase "origin/${BRANCH}" || {
+              git rebase --abort || true
+              echo "Rebase failed on attempt $attempt"
+              exit 1
+            }
+
+            if git push origin HEAD:"${BRANCH}"; then
+              echo "Push succeeded"
+              exit 0
+            fi
+
+            echo "Push failed due to remote update. Retrying..."
+            sleep 2
+          done
+
+          echo "Failed to push after multiple attempts."
+          exit 1
