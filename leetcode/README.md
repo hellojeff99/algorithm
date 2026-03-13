@@ -1,8 +1,8 @@
 # LeetCode Solutions
 
-- Total: 18
+- Total: 19
 - Easy: 10
-- Medium: 8
+- Medium: 9
 - Hard: 0
 
 ## Easy
@@ -28,4 +28,5 @@
 - [0172-factorial-trailing-zeroes](medium/0172-factorial-trailing-zeroes)
 - [0198-house-robber](medium/0198-house-robber)
 - [0209-minimum-size-subarray-sum](medium/0209-minimum-size-subarray-sum)
+- [0371-sum-of-two-integers](medium/0371-sum-of-two-integers)
 
