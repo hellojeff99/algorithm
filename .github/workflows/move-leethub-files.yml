@@ -20,12 +20,32 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Move root LeetHub folders into leetcode by difficulty (overwrite mode)
+      - name: Debug root folders
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          echo "== ROOT DIRS =="
+          for path in */; do
+            dir="${path%/}"
+            echo "[DIR] $dir"
+
+            if [[ -f "$dir/README.md" ]]; then
+              echo "  - README.md: yes"
+              echo "  - README first 20 lines:"
+              sed -n '1,20p' "$dir/README.md" || true
+            else
+              echo "  - README.md: no"
+            fi
+          done
+
+      - name: Move root LeetHub folders into leetcode by difficulty (relaxed mode)
         shell: bash
         run: |
           set -euo pipefail
 
-          mkdir -p leetcode/easy leetcode/medium leetcode/hard
+          mkdir -p leetcode/easy leetcode/medium leetcode/hard leetcode/unknown
           shopt -s nullglob
 
           moved=0
@@ -35,45 +55,47 @@ jobs:
 
             case "$dir" in
               .git|.github|leetcode|백준|baekjoon|programmers|프로그래머스|swea|goorm|구름|src|docs|scripts|assets|test|tests)
+                echo "Skip excluded dir: $dir"
                 continue
                 ;;
             esac
 
-            # 루트에 생긴 숫자 시작 폴더만 대상
-            [[ "$dir" =~ ^[0-9] ]] || continue
-
-            # README 확인
-            [[ -f "$dir/README.md" ]] || continue
-
-            # LeetCode 문제인지 확인
-            grep -qi 'leetcode\.com/problems/' "$dir/README.md" || continue
-
-            target_base=""
-
-            # 난이도 판별
-            if grep -qiE 'difficulty[^[:alpha:]]*easy|##[[:space:]]*easy|^[[:space:]-]*easy[[:space:]]*$' "$dir/README.md"; then
-              target_base="leetcode/easy"
-            elif grep -qiE 'difficulty[^[:alpha:]]*medium|##[[:space:]]*medium|^[[:space:]-]*medium[[:space:]]*$' "$dir/README.md"; then
-              target_base="leetcode/medium"
-            elif grep -qiE 'difficulty[^[:alpha:]]*hard|##[[:space:]]*hard|^[[:space:]-]*hard[[:space:]]*$' "$dir/README.md"; then
-              target_base="leetcode/hard"
-            else
-              echo "Skip: difficulty not detected for $dir"
+            # README 없으면 skip
+            if [[ ! -f "$dir/README.md" ]]; then
+              echo "Skip no README: $dir"
               continue
+            fi
+
+            # LeetCode 흔적이 README 안에 있으면 대상
+            if grep -qiE 'leetcode\.com/problems/|#\s*.*LeetCode|LeetCode' "$dir/README.md"; then
+              :
+            else
+              echo "Skip not leetcode README: $dir"
+              continue
+            fi
+
+            target_base="leetcode/unknown"
+
+            # 난이도 판별 완화
+            if grep -qiE 'easy' "$dir/README.md"; then
+              target_base="leetcode/easy"
+            elif grep -qiE 'medium' "$dir/README.md"; then
+              target_base="leetcode/medium"
+            elif grep -qiE 'hard' "$dir/README.md"; then
+              target_base="leetcode/hard"
             fi
 
             target_dir="$target_base/$dir"
 
-            echo "Processing $dir -> $target_dir"
+            echo "Move: $dir -> $target_dir"
 
-            # overwrite mode
             if [[ -d "$target_dir" ]]; then
-              echo "Overwrite: removing existing $target_dir"
+              echo "Overwrite existing: $target_dir"
               rm -rf "$target_dir"
               git add -A
             fi
 
-            git mv "$dir" "$target_dir" || mv "$dir" "$target_dir"
+            git mv "$dir" "$target_dir" 2>/dev/null || mv "$dir" "$target_dir"
             moved=1
           done
 
