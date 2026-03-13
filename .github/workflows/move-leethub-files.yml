@@ -2,7 +2,9 @@ name: Move LeetHub Files
 
 on:
   push:
-    branches: [main, master]
+    branches:
+      - main
+      - master
   workflow_dispatch:
 
 permissions:
@@ -20,27 +22,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Debug root folders
-        shell: bash
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-
-          echo "== ROOT DIRS =="
-          for path in */; do
-            dir="${path%/}"
-            echo "[DIR] $dir"
-
-            if [[ -f "$dir/README.md" ]]; then
-              echo "  - README.md: yes"
-              echo "  - README first 20 lines:"
-              sed -n '1,20p' "$dir/README.md" || true
-            else
-              echo "  - README.md: no"
-            fi
-          done
-
-      - name: Move root LeetHub folders into leetcode by difficulty (relaxed mode)
+      - name: Move root LeetHub folders into leetcode by difficulty (overwrite mode)
         shell: bash
         run: |
           set -euo pipefail
@@ -55,40 +37,32 @@ jobs:
 
             case "$dir" in
               .git|.github|leetcode|백준|baekjoon|programmers|프로그래머스|swea|goorm|구름|src|docs|scripts|assets|test|tests)
-                echo "Skip excluded dir: $dir"
                 continue
                 ;;
             esac
 
             # README 없으면 skip
-            if [[ ! -f "$dir/README.md" ]]; then
-              echo "Skip no README: $dir"
-              continue
-            fi
+            [[ -f "$dir/README.md" ]] || continue
 
-            # LeetCode 흔적이 README 안에 있으면 대상
-            if grep -qiE 'leetcode\.com/problems/|#\s*.*LeetCode|LeetCode' "$dir/README.md"; then
-              :
-            else
-              echo "Skip not leetcode README: $dir"
-              continue
-            fi
+            # LeetCode 문제 흔적이 있어야 함
+            grep -qiE 'leetcode\.com/problems/|LeetCode' "$dir/README.md" || continue
 
             target_base="leetcode/unknown"
 
-            # 난이도 판별 완화
-            if grep -qiE 'easy' "$dir/README.md"; then
+            # 난이도 판별
+            if grep -qiE '(^|[^a-zA-Z])easy([^a-zA-Z]|$)' "$dir/README.md"; then
               target_base="leetcode/easy"
-            elif grep -qiE 'medium' "$dir/README.md"; then
+            elif grep -qiE '(^|[^a-zA-Z])medium([^a-zA-Z]|$)' "$dir/README.md"; then
               target_base="leetcode/medium"
-            elif grep -qiE 'hard' "$dir/README.md"; then
+            elif grep -qiE '(^|[^a-zA-Z])hard([^a-zA-Z]|$)' "$dir/README.md"; then
               target_base="leetcode/hard"
             fi
 
             target_dir="$target_base/$dir"
 
-            echo "Move: $dir -> $target_dir"
+            echo "Processing: $dir -> $target_dir"
 
+            # 기존 폴더 덮어쓰기
             if [[ -d "$target_dir" ]]; then
               echo "Overwrite existing: $target_dir"
               rm -rf "$target_dir"
@@ -102,6 +76,66 @@ jobs:
           if [[ "$moved" -eq 0 ]]; then
             echo "No LeetHub folders matched."
           fi
+
+      - name: Generate leetcode README
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p leetcode
+
+          total=0
+          easy_count=0
+          medium_count=0
+          hard_count=0
+          unknown_count=0
+
+          for diff in easy medium hard unknown; do
+            if [[ -d "leetcode/$diff" ]]; then
+              count=$(find "leetcode/$diff" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+            else
+              count=0
+            fi
+
+            case "$diff" in
+              easy) easy_count="$count" ;;
+              medium) medium_count="$count" ;;
+              hard) hard_count="$count" ;;
+              unknown) unknown_count="$count" ;;
+            esac
+
+            total=$((total + count))
+          done
+
+          {
+            echo "# LeetCode Solutions"
+            echo
+            echo "- Total: $total"
+            echo "- Easy: $easy_count"
+            echo "- Medium: $medium_count"
+            echo "- Hard: $hard_count"
+            if [[ "$unknown_count" -gt 0 ]]; then
+              echo "- Unknown: $unknown_count"
+            fi
+            echo
+
+            for diff in easy medium hard unknown; do
+              [[ -d "leetcode/$diff" ]] || continue
+
+              count=$(find "leetcode/$diff" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+              [[ "$count" -gt 0 ]] || continue
+
+              title="$(tr '[:lower:]' '[:upper:]' <<< "${diff:0:1}")${diff:1}"
+              echo "## $title"
+              echo
+
+              find "leetcode/$diff" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort | while read -r name; do
+                echo "- [$name]($diff/$name)"
+              done
+
+              echo
+            done
+          } > leetcode/README.md
 
       - name: Commit and push changes
         shell: bash
