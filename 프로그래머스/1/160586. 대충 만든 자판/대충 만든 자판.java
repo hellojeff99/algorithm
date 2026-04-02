@@ -1,21 +1,25 @@
+import java.util.*;
 class Solution {
     public int[] solution(String[] keymap, String[] targets) {
+        int[] keyCount = new int[26];
+        Arrays.fill(keyCount, Integer.MAX_VALUE);
+        for (String key: keymap) {
+            for (int i = 0; i < key.length(); i++) {
+                int idx = key.charAt(i) - 'A';
+                keyCount[idx] = Math.min(keyCount[idx], i + 1);
+            }
+        }
         int[] result = new int[targets.length];
         for (int i = 0; i < targets.length; i++) {
             int count = 0;
             for (char c: targets[i].toCharArray()) {
-                String str = String.valueOf(c);
-                int min = Integer.MAX_VALUE;
-                for (int j = 0; j < keymap.length; j++) {
-                    if (keymap[j].contains(str)) {
-                        min = Math.min(min, keymap[j].indexOf(str) + 1);
-                    }
-                }
-                if (min == Integer.MAX_VALUE) {
+                int idx = c - 'A';
+                if (keyCount[idx] == Integer.MAX_VALUE) {
                     count = -1;
                     break;
+                } else {
+                    count += keyCount[idx];
                 }
-                else count += min;
             }
             result[i] = count;
         }
